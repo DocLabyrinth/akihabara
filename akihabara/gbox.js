@@ -1381,7 +1381,45 @@ var gbox={
 		tox.fillRect(data.x,data.y,data.w,data.h);
 		tox.restore();
 	},
-  
+ 
+/**
+  * Draws a filled path to a canvas context.
+  * @param {Object} tox The canvas context to be drawn on.
+  * @param {Array} points An array containing each point in the path
+  * @param {Object} data An object containing a set of data, including:
+  * <li>alpha {Float}: the alpha value of the rectangle; defaults to 1</li>
+  * <li>fillColor {Object}: the fill color of the box, formatted rgb(rValue, gValue, bValue); default white</li></ul>
+  * <li>strokeColor {Object}: the sroke color of the box, formatted rgb(rValue, gValue, bValue); default black</li></ul>
+  */
+	blitPath:function(tox,points,data) {
+		if (tox==null) return;
+
+		tox.save();
+		tox.globalAlpha=(data.alpha?data.alpha:1);
+		tox.fillStyle = (data.fillColor?data.fillColor:gbox.COLOR_WHITE);
+		tox.strokeStyle = (data.strokeColor?data.strokeColor:gbox.COLOR_BLACK);
+
+		var firstPoint = points.pop();
+		
+		tox.beginPath();
+		tox.moveTo(firstPoint.x, firstPoint.y);
+		for(iter = 0; iter < points.length; iter++) {
+			tox.lineTo(points[iter].x, points[iter].y);
+		}
+
+		tox.closePath();
+	
+		if(data.strokeColor != null) {
+			tox.lineWidth = 3
+			tox.stroke();
+		}
+		if(data.fillColor != null) {
+			tox.fill();
+		}
+		tox.restore();
+	},
+
+ 
   /**
   * Calculates a box collision between two collision boxes within a given tolerance. A higher tolerance means less precise collision.
   * @param {Object} o1 A collision box you're testing for collision. Must contain:
