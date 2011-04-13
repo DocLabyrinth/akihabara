@@ -63,7 +63,8 @@ var isometric = {
 		var defaults = {
 			mapOffset: {x: 0, y: 0},
 			roundType: 'floor',
-			tileWidth: 50			
+			tileWidth: 50,
+			z: 0
 		};
 
 		var settings = help.copyModel(defaults, opts);
@@ -91,6 +92,7 @@ var isometric = {
 
 		output.x += settings.mapOffset.x;
 		output.y += settings.mapOffset.y;
+		output.y -= settings.z
 
 		return output;
 	},
@@ -215,7 +217,7 @@ var isometric = {
 				outArr.push({group: gbox._objects[groupName][groupItem].group, id: gbox._objects[groupName][groupItem].id});	
 			}
 		}
-			
+		
 		/*
 		   #################
 		   using a bubble sort to set the rendering order depending on object position,
@@ -243,7 +245,7 @@ var isometric = {
 				a_obj = gbox.getObject(a_item.group, a_item.id);
 				b_obj = gbox.getObject(b_item.group, b_item.id);
 
-				if( (a_obj.y - a_obj.iso_size.y) >= b_obj.y || (a_obj.x + a_obj.iso_size.x) <= b_obj.x ) {
+				if( (a_obj.y - a_obj.iso_size.y) >= b_obj.y || (a_obj.x + a_obj.iso_size.x) <= b_obj.x ||(a_obj.z + a_obj.z) >= b_obj.z ) {
 					swapped = swap_keys(cursor_iter, cursor_iter+1);
 				}
 			}
