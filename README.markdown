@@ -1,3 +1,26 @@
+Isometric Engine
+================
+Although the commits have been few and far between I am still actively working on an isometric engine for akiahbara. A lot of the work has been experimenting and trying different approaches so it's only been occasionally that I've made enough progress to make it worth pushing to a public repo. 
+
+I updated the demo in game-isometric.html to include basic mouse support and to allow basic control of the skeletons' movement. Each skeleton picks a random point at the start and navigates to it before waiting a random interval and repeating the process. To direct a skeleton click on it to stop it then double click somewhere else on the map and it should navigate to that tile. 
+
+The isometric functions should be usable for some purposes although they still need a lot of work before being stable. Better documentation on how to use the fucntions will follow soon but for now these are the essential points:
+* Call isometric.initVectors() with the rotation and vertical scaling (shows up as tile squashing) as arguments to initialise the internal vectors before using any isometric functions.
+* Set isometric.depthGroups to an array with the group ids of objects which need depth sorting
+* At the start of the blit function for all depth sorted objects, add this code: if(isometric.inDepthPhase != true) { return; } - this prevents the usual gbox functions from drawing out of order, it is a bit of a hack so it may change if I find a more elegant solution
+Blit as much as possible of the background to a buffer canvas and draw from it. If the game is tile based then drawing background tiles will usually be the biggest cause of calls to isometric transform functions and will kill performance if it happens once a frame for a map any larger than about 10x10 tiles. isometric.finalizeTilemap() was designed to assist with calculating the canvas size for this but it is still buggy :( (see demo for example) it should be fixed soon.
+* Depth sorted objects can be a drain on performance if there are lots of them in the game world. My code still uses a bubble sort due to problems I had with getting other algorithms to sort reliably. If you are writing a tile based game it may be better to loop over the tiles and draw them and their contents from back to front. (See the lua based map drawing functions in Corsix-TH http://code.google.com/p/corsix-th/source/checkout for an example of this)
+
+
+Known Issues / Possible Improvements
+-----------------------------------
+* Depth sorting algorithm needs improving, non-visible objects should be excluded from the sort
+* Akihabara gbox camera functions break isometric setup if called, the offset of the map/objects is adjusted to give the ability to scroll, this needs solving or integrating better
+* A toys.isometric namespace combining elements of other toys (topview and platformer especially) and including some simplified 3d collision and vector functions will be useful eventually
+
+- DocLabyrinth
+
+
 Akihabara
 =========
 

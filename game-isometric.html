@@ -9,7 +9,9 @@
 	<script type="text/javascript" src="akihabara/gamecycle.js"></script>
 	<script type="text/javascript" src="akihabara/sylvester.js"></script>
 	<script type="text/javascript" src="akihabara/isometric.js"></script>
-	<!-- <script type="text/javascript" src="akihabara/mouse.js"></script> !-->
+	<script type="text/javascript" src="akihabara/mouse.js"></script>
+	
+	<script type="text/javascript" src="resources/isometric/a_star.js"></script>
 
 		<style>BODY { -webkit-user-select:none; margin:0px};</style>
 		<meta name="viewport" content="width=device-width; initial-scale=1.0; maximum-scale=1.0; user-scalable=0;" />
@@ -17,11 +19,22 @@
 	<body>
 	</body>
 	<script type="text/javascript">
+
+	/* bundle import objects */
+	var skeletons = {};
+	var walls = {};
+
+	/* global variables */
 	var tileWidth = 65;
+	var num_spawned = 0;
 	var offset = {x:-150, y:150};
-	var gameMap;
+	var newoffset = null;
+	var g_gameMap;
 	var pathMap;
 	var frameCount = 0;
+	var maingame;
+	var sel_skeleton = null;
+	var g_recalc = 0; // how many times has a_star been called?
 
 function getMap() {
 	return help.asciiArtToMap([
@@ -57,243 +70,98 @@ function getMap() {
     ], [ [0, ' '], [1, 'x'] ]);
 }
 
-function spawnPlayer(id_num) {
-	gbox.addObject({
-		id: 'player_id:'+id_num,
-		group: 'player',
-		tileset: 'player_tiles',
-		depth: 0,
-		iso_pos: {x: 0, y: 0, xx: 0, yy: 0},
-		iso_size: {x: 30, y: 30, z: 0},
-		iso_offset: {x: 0, y: 0},
+	function spawnSkeleton(type) {
+		num_spawned++;
 
-		// pathfinding
-		moving_to: null,
-		nodes: [],
-		waypoint: [],
-		speed: 2,
-		
-		initialize: function() {
-			toys.topview.initialize(this,{});
-			this.x = 150;
-			this.y = 450;
+		var init_model = help.cloneObject(skeletons[type]);
+		init_model = help.copyModel(init_model, {x: 300, y: 190, id: 'skeleton:'+num_spawned});
+		init_model.move('skeleton init function');
+		gbox.addObject(init_model);
+	}
 
-			this.moving_to = {x: this.x, y: this.y};
-
-			this.animList = {
-				still: {speed: 1, frames: [0]},
-				walk:  {speed: 2, frames: [0,1,2,3,4,5,6,7]}
-			};
-
-			this.animIndex = 'still';
-			this.frame = 0;
-
-			var iso_start = isometric.worldToScreen(this.x, this.y, isometric.vectors.screen, {mapOffset: offset});
-			var iso_limit = isometric.worldToScreen(this.x+this.iso_size.x, this.y+this.iso_size.y, isometric.vectors.screen, {mapOffset: offset});
-
-			// calculate this once
-			this.iso_offset = {x: iso_limit.x - iso_start.x, y: iso_limit.y - iso_start.y};
-
-			// set this to an initial value
-			this.iso_pos = {x: iso_start.x, y: iso_start.y, xx: iso_start.x + this.iso_offset.x, yy: iso_start.y + this.iso_offset.y};
-/*
-			if(mouse.tracking == true) {
-		
-				gbox.getBuffer().addEventListener('mouseup', function(ev) {	
-					var player = gbox.getObject('player', 'player_id');
-
-					var clickOn = isometric.screenToWorld(mouse.pos.x, mouse.pos.y, isometric.vectors.mouse, {mapOffset: offset});
-					player.moving_to = clickOn;
-
-				});
-	
-			}
-*/
-			// start off with a random waypoint
-			this.moving_to = {x: Math.floor(Math.random()*501), y: Math.floor(Math.random()*501)};
-
-		},
-		first: function() {
-		//	toys.topview.controlKeys(this, { left: 'left', right: 'right', up: 'up', down: 'down' });
-			toys.topview.handleAccellerations(this);
-		//	toys.topview.applyForces(this);
-
-			if( this.moving_to != null ) {
-			/*	this.nodes = a_star([Math.floor(this.x/tileWidth), Math.floor(this.y/tileWidth)], [Math.floor(this.moving_to.x/tileWidth), Math.floor(this.moving_to.y/tileWidth)], pathMap, pathMap.length, pathMap[0].length);
-
-				alert( JSON.stringify(pathMap) );
-
-				this.waypoint = [tileWidth*this.nodes[1].x, tileWidth*this.nodes[1].y];
-						      
-			      if (this.x < this.waypoint[0]) this.x += this.speed;
-			      if (this.x > this.waypoint[0]) this.x -= this.speed;
-			      if (this.y < this.waypoint[1]) this.y += this.speed;
-			      if (this.y > this.waypoint[1]) this.y -= this.speed;
-			*/
-				this.waypoint[0] = this.moving_to.x;
-				this.waypoint[1] = this.moving_to.y;
-			      this.accy = this.accx = 0;
-
-				if( Math.abs(this.waypoint[0] - this.x) < this.speed ) {
-					this.x = this.waypoint[0];
-				}
-				else {
-				      if (this.x < this.waypoint[0]) {
-					this.x += this.speed;
-					this.accx += 1;
-				      }
-				      if (this.x > this.waypoint[0]) {
-					this.x -= this.speed;
-					this.accx -= 1;
-				      }
-				}
-
-				if( Math.abs(this.waypoint[1] - this.y) < this.speed ) {
-					this.y = this.waypoint[1];
-				}
-				else {
-				      if (this.y < this.waypoint[1]) {
-					this.y += this.speed;
-					this.accy += 1;
-				      }
-				      if (this.y > this.waypoint[1]) {
-					this.y -= this.speed;
-					this.accy -= 1;
-				      }
-				}
-
-		
-		  	      if(this.accx == 0 && this.accy == 0) {	
-			       //alert( JSON.stringify({this_x: this.x, this_y: this.y, mov_x: this.moving_to.x, mov_y: this.moving_to.y}) );	
-			      }
-			      if(this.x == this.moving_to.x && this.y == this.moving_to.y) {
-				// alert('reached point');
-				// pick the next random point
-				this.moving_to = {x: Math.floor(Math.random()*501), y: Math.floor(Math.random()*501)};
-			      }	
-			}
-			
-			if(this.accx == 0 && this.accy == 0) {
-				this.animIndex = 'still';	
-			}
-			else {
-				this.animIndex = 'walk';
-			}
-
-			if (frameCount%this.animList[this.animIndex].speed == 0) {
-				this.frame = help.decideFrame(frameCount, this.animList[this.animIndex]);
-			}
-			var iso_start = isometric.worldToScreen(this.x, this.y, isometric.vectors.screen, {mapOffset: offset, rectWidth: this.iso_size.x, rectHeight: this.iso_size.y});
-			this.iso_pos = {x: iso_start.x, y: iso_start.y, xx: iso_start.x + this.iso_offset.x, yy: iso_start.y + this.iso_offset.y};
-		},
-		blit: function() {
-			if(isometric.inDepthPhase != true) {
-				return;
-			}
-
-			/*
-			gbox.blitRect(gbox.getBufferContext(), {
-				x: this.iso_pos.x,
-				y: this.iso_pos.y,
-				w: gbox.getTiles(this.tileset).tilew,
-				h: gbox.getTiles(this.tileset).tileh
-			});
-			*/
-
-			
-			var rectPoints = isometric.getRectPoints(this.x, this.y, isometric.vectors.screen, {mapOffset: offset, rectWidth: this.iso_size.x, rectHeight: this.iso_size.y});
-			gbox.blitPath(gbox.getBufferContext(), rectPoints, {
-							fillColor: gbox.COLOR_WHITE,
-							strokeColor: '#AAA'});
-		
-			gbox.blitTile(gbox.getBufferContext(), {
-				tileset: this.tileset,
-				tile:    this.frame,
-				dx:      this.iso_pos.x,
-				dy:      this.iso_pos.y - gbox.getTiles(this.tileset).tileh,
-				fliph:   this.fliph,
-				flipv:   this.flipv,
-				camera:  this.camera,
-				alpha:   1.0
-			});
-
-
-		}
-	});
-}
-
-	function addWall() {
-		gbox.addObject({
-			id: 'wall_id',
-			group: 'wall',
-			tileset: 'wall_section',
-
-			num_pieces: 5,
-
-			depth: 0,
-			iso_pos: {x: 0, y: 0, xx: 0, yy: 0},
-			iso_size: {x: 250, y: 50, z: 0},
-			iso_limit: {x: 0, y: 0},
-
-			initialize: function() {
-				this.x = 200;
-				this.y = 400;		
-
-				var iso_start = isometric.worldToScreen(this.x, this.y, isometric.vectors.screen, {mapOffset: offset});
-				var iso_limit = isometric.worldToScreen(this.x+this.iso_size.x, this.y+this.iso_size.y, isometric.vectors.screen, {mapOffset: offset});
-
-				// calculate this once
-				this.iso_offset = {x: iso_limit.x - iso_start.x, y: iso_limit.y - iso_start.y};
-			
-				this.iso_pos = {x: iso_start.x, y: iso_start.y, xx: iso_start.x + this.iso_offset.x, yy: iso_start.y + this.iso_offset.y};
-
-			},
-			first: function() {
-
-				var iso_start = isometric.worldToScreen(this.x, this.y, isometric.vectors.screen, {mapOffset: offset});
-				this.iso_pos = {x: iso_start.x, y: iso_start.y, xx: iso_start.x + this.iso_offset.x, yy: iso_start.y + this.iso_offset.y};
-			},
-			blit: function() {
-				if(isometric.inDepthPhase != true) {
+	function bindMouseEvents() {
+		if(mouse.tracking == true) {
+			gbox.getBuffer().addEventListener('mousemove', function(ev) {
+				// maingame.hud.setValue('cam_pos', 'value', 'dragging: '+mouse.dragging);
+				if( !mouse.dragging == true) {
 					return;
 				}
 
-				var iso, piece_size;
+				if(mouse.pos.chx != 0 || mouse.pos.chy != 0) {
+					newoffset = offset;
+					newoffset.x -= mouse.pos.chx;
+					newoffset.y -= mouse.pos.chy;
+				}
+				else {
+					newoffset = null;
+				}
+			}, false);
+		
+			window.oncontextmenu = function() {
+				return false;
+			};
 
-				var rectPoints = isometric.getRectPoints(this.x, this.y, isometric.vectors.screen, {mapOffset: offset, rectWidth: this.iso_size.x, rectHeight: this.iso_size.y});
-				gbox.blitPath(gbox.getBufferContext(), rectPoints, {
-					fillColor: gbox.COLOR_WHITE,
-					strokeColor: '#AAA'
-				});
-
-				piece_size = Math.floor(this.iso_size.x/this.num_pieces);
-
-
-				for(wall_it = this.x+(piece_size*this.num_pieces); wall_it >= this.x; wall_it -= piece_size) {
-					// ##################### TODO: calculate the offset and add each time instead of calling the conversion function
-					iso = isometric.worldToScreen(wall_it, this.y, isometric.vectors.screen, {mapOffset: offset, rectWidth: this.iso_size.x});
-					
-					gbox.blitTile(gbox.getBufferContext(), {
-						tileset: this.tileset,
-						tile:    0,
-						dx:      iso.x,
-						dy:      iso.y - gbox.getTiles(this.tileset).tileh + 15,
-						fliph:   this.fliph,
-						flipv:   this.flipv,
-						camera:  this.camera,
-						alpha:   1.0
-					});
-					
+			gbox.getBuffer().addEventListener('dblclick', function(ev) {
+				if(sel_skeleton == null) {
+					return;
 				}
 
-			}
-		});
+				if(sel_skeleton != null) {
+					gbox._objects[sel_skeleton.group][sel_skeleton.id].handle_click();
+				}
 
+				// var trans_pt = isometric.screenToWorld(mouse.pos.x, mouse.pos.y, isometric.vectors.mouse, {mapOffset: offset, tileWidth: tileWidth});
+				// gbox._objects[sel_skeleton.group][sel_skeleton.id].moving_to = trans_pt;
+			}, false);
+			gbox.getBuffer().addEventListener('mouseup', function(ev) {
+				if(ev.button != 0) {
+					return;
+				}
+
+				var mouseTest = {
+					x: mouse.pos.x,
+					y: mouse.pos.y,
+					w: 1,
+					h: 1
+				};		
+	
+				// for(var obj_it = 0; obj_it < gbox._groups['player'].length-1; obj_it++) {
+				var objTest;
+				for(obj_it in gbox._objects['skeletons']) {
+					objTest = {
+						x: gbox._objects['skeletons'][obj_it].iso_pos.x,
+						y: gbox._objects['skeletons'][obj_it].iso_pos.y - gbox.getTiles(gbox._objects['skeletons'][obj_it].tileset).tileh,
+						w: gbox.getTiles(gbox._objects['skeletons'][obj_it].tileset).tilew, 
+						h: gbox.getTiles(gbox._objects['skeletons'][obj_it].tileset).tileh
+					};
+
+					if(
+						gbox.collides(objTest, mouseTest)
+					) {
+						gbox._objects['skeletons'][obj_it].clicked_on = true;
+						gbox._objects['skeletons'][obj_it].halt();
+
+						if(sel_skeleton == null) {
+							sel_skeleton = {group: null, id: null};
+						}
+						else {
+							// if a skeleton was already selected then set it moving randomly again
+							gbox._objects[sel_skeleton.group][sel_skeleton.id].selected = false;
+							gbox._objects[sel_skeleton.group][sel_skeleton.id].move('skeleton select/de-select function');
+						}
+						sel_skeleton.group = 'skeletons';
+						sel_skeleton.id = obj_it 
+						gbox._objects[sel_skeleton.group][sel_skeleton.id].selected = true;
+						
+					}
+				}
+
+			}, false);
+		}
 	}
 
-
 	function main() {
-		gbox.setGroups(['background', 'game', 'player', 'wall']);	
+		gbox.setGroups(['background', 'game', 'skeletons', 'wall']);	
 
 		maingame = gamecycle.createMaingame('game', 'game');
 		maingame.gameMenu = function() { return true; };
@@ -302,9 +170,7 @@ function spawnPlayer(id_num) {
 		maingame.gameEndingIntroAnimation = function(reset) { return true; };
 		maingame.pressStartIntroAnimation = function() { return true; };
 		maingame.initializeGame = function() {
-
-/*
-			maingame.hud.setWidget('cam_pos', {
+			maingame.hud.setWidget('path_count', {
 				widget: 'label',
 				font: 'small',
 				value: 0,
@@ -313,46 +179,26 @@ function spawnPlayer(id_num) {
 				clear: true
 			});
 
-			maingame.hud.setWidget('depth', {
-				widget: 'label',
-				font: 'small',
-				value: 0,
-				dx: 0, //gbox.getScreenW() - 240,
-				dy: 25,
-				clear: true
-			});
-
-			maingame.hud.setWidget('objects', {
-				widget: 'label',
-				font: 'small',
-				value: 0,
-				dx: 5, //gbox.getScreenW() - 240,
-				dy: gbox.getScreenH() - 35,
-				clear: true
-			});
-*/
 			// initialize the vectors for isometric functions
 			isometric.initVectors(45 * (Math.PI/180), 0.5);
 
-			isometric.depthGroups = ['player', 'wall'];
+			isometric.depthGroups = ['skeletons', 'wall'];
 
-				gameMap = {
-					map: getMap(),
-					tileset: {},
-				};	
+			g_gameMap = {
+				map: getMap(),
+				tileset: {},
+			};	
 
-				gameMap = isometric.finalizeTilemap(gameMap, tileWidth);
+			g_gameMap = isometric.finalizeTilemap(g_gameMap, tileWidth);
 
-				// build pathmap to use with a*
-				pathMap = [];
-				for(var row_it = 0; row_it < gameMap.map.length; row_it++) {
-					pathMap[row_it] = [];
-					for(var col_it = 0; col_it < gameMap.map.length; col_it++) {
-						pathMap[row_it][col_it] = gameMap.map[row_it][col_it] > 0 ? 1 : 0;
-					}
+			// build pathmap to use with a*
+			pathMap = [];
+			for(var row_it = 0; row_it < g_gameMap.map.length; row_it++) {
+				pathMap[row_it] = [];
+				for(var col_it = 0; col_it < g_gameMap.map[0].length; col_it++) {
+					pathMap[row_it][col_it] = g_gameMap.map[row_it][col_it] > 0 ? 1 : 0;
 				}
-
-					
+			}
 
 			gbox.addObject({    
 				id:    'background_id', // This is the object ID
@@ -362,26 +208,24 @@ function spawnPlayer(id_num) {
 
 				initialize: function() {
 					this.tileWidth = tileWidth;
-				
-					gbox.createCanvas('map_canvas', { w: gameMap.w, h: gameMap.h });
+
+					mouse.trackStart();
+					bindMouseEvents();
+
+					gbox.createCanvas('map_canvas', { w: g_gameMap.w, h: g_gameMap.h });
 					gbox.blitFade(gbox.getCanvasContext('map_canvas'), { alpha: 1, color: '#000' });
 
 					var col_it, row_it, pickTile;
-					/*
-					for(col_it = 0; col_it < Math.floor(gameMap.h/this.tileWidth); col_it++) {
-						for(row_it = 0; row_it < Math.floor(gameMap.w/this.tileWidth); row_it++) {
-					*/
-					for(col_it = 0; col_it < Math.floor(gameMap.h/this.tileWidth); col_it++) {
-					//for(col_it = Math.floor(gameMap.h/this.tileWidth); col_it > 0 ; col_it--) {
-						for(row_it = Math.floor(gameMap.w/this.tileWidth); row_it > 0 ; row_it--) {
-						// for(row_it = 0; row_it < Math.floor(gameMap.w/this.tileWidth); row_it++) {
-							trans_co = isometric.worldToScreen(row_it*this.tileWidth, col_it*this.tileWidth, isometric.vectors.screen, {mapOffset: gameMap.initOffset, tileWidth:this.tileWidth});
+				//	for(col_it = 0; col_it < Math.floor(g_gameMap.h/this.tileWidth); col_it++) {
+				//		for(row_it = Math.floor(g_gameMap.w/this.tileWidth); row_it > 0 ; row_it--) {
+					for(row_it = g_gameMap.map.length-1; row_it >= 0; row_it--) {
+						for(col_it = 0; col_it < g_gameMap.map[0].length; col_it++) {
+							trans_co = isometric.worldToScreen(row_it*this.tileWidth, col_it*this.tileWidth, isometric.vectors.screen, {mapOffset: g_gameMap.initOffset, tileWidth:this.tileWidth});
 
 							// get the pattern to draw on this tile from the map
-							// whichTile = gameMap.map[row_it][col_it];
-							whichTile = gameMap.map[col_it][row_it];
-							
-							
+							// whichTile = g_gameMap.map[row_it][col_it];
+							whichTile = g_gameMap.map[row_it][col_it];
+
 							gbox.blitTile(gbox.getCanvasContext('map_canvas'), {
 								tileset: this.tileset,
 								tile:    whichTile,
@@ -394,13 +238,41 @@ function spawnPlayer(id_num) {
 							});
 						
 						}
-					}					
+					}
+
+					for(row_it = 0; row_it < g_gameMap.map.length; row_it++) {
+						for(col_it = 0; col_it < g_gameMap.map[0].length; col_it++) {
+							var rectPoints = isometric.getRectPoints(row_it*this.tileWidth, col_it*this.tileWidth, isometric.vectors.screen, {mapOffset: g_gameMap.initOffset, rectWidth: this.tileWidth});
+
+							var useColor;
+							if(pathMap[row_it][col_it] < 1) {
+								useColor = '#89FF6B';
+							}
+							else {
+								useColor = '#FF5B4F';
+							}
+							
+							/*	
+							// overlay a coloured grid showing which tiles are passable
+							gbox.blitPath(gbox.getCanvasContext('map_canvas'), rectPoints, {
+								// fillColor: gbox.COLOR_WHITE,
+								strokeColor: useColor
+							});
+							*/
+						}
+					}
+							
+
+				},
+				first: function() {
+					if(newoffset !== null) {
+						offset = newoffset;
+					}
 				},
 				blit: function() {
 					gbox.blitFade(gbox.getBufferContext(), { alpha: 1, color: '#000' });
 
-					gbox.blit(gbox.getBufferContext(), gbox.getCanvas('map_canvas'), {dx: offset.x-gameMap.initOffset.x, dy: offset.y-gameMap.initOffset.y, dw: gbox.getCanvas('map_canvas').width, dh: gbox.getCanvas('map_canvas').height, sourcecamera: true });
-
+					gbox.blit(gbox.getBufferContext(), gbox.getCanvas('map_canvas'), {dx: offset.x-g_gameMap.initOffset.x, dy: offset.y-g_gameMap.initOffset.y, dw: gbox.getCanvas('map_canvas').width, dh: gbox.getCanvas('map_canvas').height, sourcecamera: true });
 
 					/*	
 					var pickPoint = isometric.screenToWorld(mouse.pos.x, mouse.pos.y, isometric.vectors.mouse, {mapOffset: offset, tileWidth:this.tileWidth});
@@ -414,8 +286,8 @@ function spawnPlayer(id_num) {
 					var pickTile = isometric.getRectPoints(snapMouse.x, snapMouse.y, isometric.vectors.screen, {mapOffset: offset, rectWidth:this.tileWidth});
 
 					var tile_x = Math.floor(snapMouse.x/this.tileWidth), tile_y = Math.floor(snapMouse.y/this.tileWidth);
-					if(tile_x >= 0 && tile_x < gameMap.map.length && 
-						tile_y >= 0 && tile_y < gameMap.map[0].length) {
+					if(tile_x >= 0 && tile_x < g_gameMap.map.length && 
+						tile_y >= 0 && tile_y < g_gameMap.map[0].length) {
 					
 						gbox.blitPath(gbox.getBufferContext(), pickTile, {
 							fillColor: null, //gbox.COLOR_WHITE,
@@ -426,17 +298,20 @@ function spawnPlayer(id_num) {
 	
 					isometric.blitDepthLayer(gbox.getBufferContext(), isometric.depthSort());
 
+
+					maingame.hud.setValue('path_count', 'value', 'a_star calls: '+g_recalc);
+					maingame.hud.redraw();
+
 					frameCount++;
 				}
 			});
 
-			for(p_iter = 0; p_iter < 10; p_iter++) {
-				spawnPlayer(p_iter);
+			for(var sk_iter = 0; sk_iter < 10; sk_iter++) {
+				// spawnSkeleton('basic');
+				spawnSkeleton('mouse');
 			}
-			addWall();
-			// mouse.trackStart();
+			
 		}
-
 
 		gbox.go();
 	}
@@ -444,48 +319,11 @@ function spawnPlayer(id_num) {
 	function loadResources() {
 		help.akihabaraInit({title:"Isometric Game Test", width: 800, height: 600, zoom: 1});
 
-		// gbox.addImage('crap-tiles', 'resources/isometric/crap-tiles.png');
-		gbox.addImage('crap-tiles', 'resources/isometric/road_tiles.png');
-		gbox.addTiles({
-			id: 'map_pieces',
-			image: 'crap-tiles',
-			tileh: 65,
-			tilew: 100,
-			tilerow: 2,
-			gapx: 0,
-			gapy: 0	
-		});	
-
-		gbox.addImage('player_sprite', 'resources/isometric/skeleton-warrior-skinny.png');
-		// Sprites sheets are cut here, setting the tile size, the number of sprites per row and the gap of the frames set.
-		gbox.addTiles({
-			id:      'player_tiles', // set a unique ID for future reference
-			image:   'player_sprite', // Use the 'sprites' image, as loaded above
-			tileh:   70,
-			tilew:   50,
-			tilerow: 8,
-			gapx:    0,
-			gapy:    0
-		});
-
-		gbox.addImage('wall_image', 'resources/isometric/wall_section.png');
-		gbox.addTiles({
-			id:      'wall_section', // set a unique ID for future reference
-			image:   'wall_image', // Use the 'sprites' image, as loaded above
-			tileh:   112,
-			tilew:   64,
-			tilerow: 1,
-			gapx:    0,
-			gapy:    0
-		});
-
-		gbox.addImage('font', 'resources/leavemealone/font.png');
-		gbox.addFont({ id: 'small', image: 'font', firstletter: ' ', tileh: 8, tilew: 8, tilerow: 255, gapx: 0, gapy: 0 });
-
-		gbox.addImage('logo', 'resources/leavemealone/logo.png');
+		gbox.addBundle({file:"resources/isometric/bundle.js"});
 
 		gbox.setCallback(main);
 		gbox.loadAll();
+
 	}
 	window.addEventListener('load', loadResources, false);
 
